@@ -46,6 +46,12 @@ interface ItadApiService {
         @Body pedido: PedidoMinimos
     ): RespuestaOfertasItad
 
+    @POST("lookup/id/shop/$TIENDA_STEAM/v1")
+    suspend fun idsDeItad(
+        @Query("key") key: String,
+        @Body idsSteam: List<String>
+    ): Map<String, String?>
+
     @POST("lookup/shop/$TIENDA_STEAM/id/v1")
     suspend fun idsDeSteam(
         @Query("key") key: String,

@@ -1,10 +1,16 @@
 package me.kevinbayona.steamsalesapp
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -21,6 +27,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        crearCanal(this)
+        if (getSharedPreferences("steam_sales", MODE_PRIVATE).getBoolean("notificaciones", true)) {
+            programarRevision(this)
+        }
         setContent {
             SteamSalesAppTheme {
                 App()
@@ -38,6 +48,20 @@ fun App() {
     var mostrarLogin by remember { mutableStateOf(false) }
 
     val abrirJuego: (Juego) -> Unit = { juego -> juegoAbierto = juego }
+
+    val contexto = LocalContext.current
+    val pedirPermiso = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val cambiarNotificaciones: (Boolean) -> Unit = { activo ->
+        vm.cambiarNotificaciones(activo)
+        if (activo && !tienePermisoNotificaciones(contexto) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pedirPermiso.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    LaunchedEffect(Unit) {
+        if (vm.notificaciones && !tienePermisoNotificaciones(contexto) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pedirPermiso.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     if (mostrarLogin) {
         PantallaLogin(
@@ -83,7 +107,12 @@ fun App() {
         } else if (pestana == "Deseados") {
             PantallaDeseados(vm = vm, alAbrirJuego = abrirJuego, modifier = modifier)
         } else {
-            PantallaAjustes(vm = vm, alIniciarSesion = { mostrarLogin = true }, modifier = modifier)
+            PantallaAjustes(
+                vm = vm,
+                alIniciarSesion = { mostrarLogin = true },
+                alCambiarNotificaciones = cambiarNotificaciones,
+                modifier = modifier
+            )
         }
     }
 }

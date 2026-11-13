@@ -24,6 +24,7 @@ import me.kevinbayona.steamsalesapp.datos.PREFIJO_STEAM_ID
 import me.kevinbayona.steamsalesapp.datos.valorXml
 import me.kevinbayona.steamsalesapp.datos.ItadApi
 import me.kevinbayona.steamsalesapp.datos.PedidoMinimos
+import me.kevinbayona.steamsalesapp.datos.PrecioDetalle
 import me.kevinbayona.steamsalesapp.datos.TIENDA_STEAM
 import me.kevinbayona.steamsalesapp.datos.SteamApi
 import me.kevinbayona.steamsalesapp.datos.juegosDesdeHtml
@@ -148,6 +149,9 @@ class SteamViewModel(application: Application) : AndroidViewModel(application) {
     var mensajeSincronizacion by mutableStateOf("")
         private set
     var ultimaSincronizacion by mutableStateOf("")
+        private set
+
+    var notificaciones by mutableStateOf(true)
         private set
 
     init {
@@ -453,21 +457,23 @@ class SteamViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun actualizarPrecios() {
-        for (i in deseados.indices) {
+        val precios = mutableMapOf<Int, PrecioDetalle>()
+        for (grupo in deseados.map { it.id }.chunked(50)) {
             try {
-                val id = deseados[i].id
-                val datos = SteamApi.servicio.detalle(id = id, region = region.codigo)[id.toString()]?.data
-                if (datos != null) {
-                    val nuevo = juegoDesdeDetalle(datos)
-                    deseados[i] = deseados[i].copy(
-                        precioNormal = nuevo.precioNormal,
-                        precioFinal = nuevo.precioFinal,
-                        descuento = nuevo.descuento,
-                        moneda = nuevo.moneda
-                    )
-                }
+                precios.putAll(SteamApi.preciosLocales(grupo, region.codigo))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
             }
+        }
+        for (i in deseados.indices) {
+            val precio = precios[deseados[i].id] ?: continue
+            deseados[i] = deseados[i].copy(
+                precioNormal = precio.precioNormal,
+                precioFinal = precio.precioFinal,
+                descuento = precio.descuento,
+                moneda = precio.currency
+            )
         }
     }
 
@@ -478,18 +484,29 @@ class SteamViewModel(application: Application) : AndroidViewModel(application) {
                 mensajeSincronizacion = "Tu lista de deseados de Steam es privada o está vacía"
                 return
             }
-            val recientes = lista.sortedByDescending { it.fechaAgregado }.take(30)
+            val nuevosIds = lista
+                .sortedByDescending { it.fechaAgregado }
+                .map { it.appid }
+                .filter { !esDeseado(it) }
+            if (nuevosIds.isEmpty()) return
+
+            val articulos = SteamApi.articulosEnLote(nuevosIds, region.codigo).associateBy { it.appid }
             var nuevos = 0
-            for (item in recientes) {
-                if (esDeseado(item.appid)) continue
-                try {
-                    val datos = SteamApi.servicio.detalle(id = item.appid, region = region.codigo)[item.appid.toString()]?.data
-                    if (datos != null) {
-                        deseados.add(juegoDesdeDetalle(datos))
-                        nuevos++
-                    }
-                } catch (e: Exception) {
-                }
+            for (id in nuevosIds) {
+                val articulo = articulos[id] ?: continue
+                val compra = articulo.compra
+                deseados.add(
+                    Juego(
+                        id = id,
+                        nombre = articulo.name,
+                        imagen = articulo.imagen,
+                        precioNormal = compra?.precioNormal ?: 0,
+                        precioFinal = compra?.precioFinal ?: 0,
+                        descuento = compra?.descuento ?: 0,
+                        moneda = region.moneda
+                    )
+                )
+                nuevos++
             }
             if (nuevos > 0) mensajeSincronizacion = "$nuevos juegos nuevos desde Steam"
         } catch (e: Exception) {
@@ -505,16 +522,29 @@ class SteamViewModel(application: Application) : AndroidViewModel(application) {
         sincronizarDeseados()
     }
 
+    fun cambiarNotificaciones(activo: Boolean) {
+        notificaciones = activo
+        guardarEnMemoria()
+        if (activo) {
+            programarRevision(getApplication())
+        } else {
+            cancelarRevision(getApplication())
+        }
+    }
+
     private fun guardarEnMemoria() {
         val textoPerfil = if (perfil != null) Json.encodeToString(perfil) else ""
         memoria.edit()
             .putString("deseados", Json.encodeToString(deseados.toList()))
             .putString("region", region.codigo)
             .putString("perfil", textoPerfil)
+            .putBoolean("notificaciones", notificaciones)
             .apply()
     }
 
     private fun cargarDesdeMemoria() {
+        notificaciones = memoria.getBoolean("notificaciones", true)
+
         val codigo = memoria.getString("region", "US")
         region = regiones.find { it.codigo == codigo } ?: regiones[0]
 

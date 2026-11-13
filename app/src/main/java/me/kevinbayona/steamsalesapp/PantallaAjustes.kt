@@ -1,5 +1,6 @@
 package me.kevinbayona.steamsalesapp
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -21,6 +22,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,7 +52,12 @@ import me.kevinbayona.steamsalesapp.ui.theme.TextoGris
 import me.kevinbayona.steamsalesapp.ui.theme.Verde
 
 @Composable
-fun PantallaAjustes(vm: SteamViewModel, alIniciarSesion: () -> Unit, modifier: Modifier = Modifier) {
+fun PantallaAjustes(
+    vm: SteamViewModel,
+    alIniciarSesion: () -> Unit,
+    alCambiarNotificaciones: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
@@ -66,6 +75,58 @@ fun PantallaAjustes(vm: SteamViewModel, alIniciarSesion: () -> Unit, modifier: M
             fontFamily = Inter,
             fontSize = 12.sp
         )
+
+        TituloSeccion(texto = "NOTIFICACIONES")
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Tarjeta)
+                .clickable { alCambiarNotificaciones(!vm.notificaciones) }
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = "Avisarme de ofertas y mínimos históricos",
+                color = TextoBlanco,
+                fontFamily = Inter,
+                fontSize = 16.sp,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = vm.notificaciones,
+                onCheckedChange = { alCambiarNotificaciones(it) },
+                colors = SwitchDefaults.colors(checkedTrackColor = Azul, checkedThumbColor = Fondo)
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Revisamos tu lista de deseados cada 6 horas y te avisamos cuando un juego sale en oferta o llega a su precio más bajo.",
+            color = TextoGris,
+            fontFamily = Inter,
+            fontSize = 12.sp
+        )
+
+        if (BuildConfig.DEBUG) {
+            val contexto = LocalContext.current
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Probar notificaciones ahora (debug)",
+                color = Azul,
+                fontFamily = Inter,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Boton)
+                    .clickable {
+                        if (!vm.notificaciones) alCambiarNotificaciones(true)
+                        probarRevision(contexto)
+                        Toast.makeText(contexto, "Revisando ofertas…", Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(12.dp)
+            )
+        }
 
         Spacer(modifier = Modifier.height(32.dp))
         Text(
